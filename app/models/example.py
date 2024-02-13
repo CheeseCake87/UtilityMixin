@@ -5,7 +5,7 @@ from .__mixins__ import UtilityMixin
 
 
 class Example(db.Model, UtilityMixin):
-    db = db
+    __um_db__ = db
 
     example_id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
