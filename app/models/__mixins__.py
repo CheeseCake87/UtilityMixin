@@ -34,8 +34,10 @@ except ImportError:
 
 class ParseValueError(Exception):
     def __init__(self, key, value: t.Any, type_: t.Any):
-        self.message = (f"Unable to parse value: {value} - of raw "
-                        f"type: {type(value)} - for: {key} - as sqla type: {type_}")
+        self.message = (
+            f"Unable to parse value: {value} - of raw "
+            f"type: {type(value)} - for: {key} - as sqla type: {type_}"
+        )
         super().__init__(self.message)
 
 
@@ -46,19 +48,25 @@ class ModelAttributeError(Exception):
 
 
 class UtilityMixin:
-    __um_db__: SQLAlchemy = None
+    __um_session__: SQLAlchemy = None
 
     @classmethod
-    def _um_check_db_attr_exists(cls):
-        if not cls.__um_db__:
+    def _um_check_session_exists(cls):
+        if not cls.__um_session__:
+            if hasattr(cls, "query"):
+                cls.__um_session__ = cls.query.session
+                return
+
             raise AttributeError(
-                dedent("""
+                dedent(
+                    """
                 The class using this mixin must have a db attribute set to the Flask-SQLAlchemy instance",
                 Example:
                 from app.extensions import db
                 class Example(db.Model, UtilityMixin):
-                    __um_db__ = db
-                """),
+                    __um_session__ = db.session
+                """
+                ),
             )
 
     @staticmethod
@@ -223,10 +231,10 @@ class UtilityMixin:
 
         return {**data, **joins}
 
-    def um_save(self):
-        self._um_check_db_attr_exists()
+    def um_commit(self):
+        self._um_check_session_exists()
 
-        self.__um_db__.session.commit()
+        self.__um_session__.commit()
         return self
 
     @classmethod
@@ -234,12 +242,12 @@ class UtilityMixin:
             cls,
             pkv: int = None,
             fields: dict = None,
-    ):
+    ) -> int:
         """
         pkv is the primary key value
         fields: {'model_attribute': 'value', ...}
         """
-        cls._um_check_db_attr_exists()
+        cls._um_check_session_exists()
 
         q = select(func.count()).select_from(cls)
 
@@ -253,7 +261,7 @@ class UtilityMixin:
                     if hasattr(cls, model_attr):
                         q = q.where(getattr(cls, model_attr) == value)  # type: ignore
 
-        return cls.__um_db__.session.execute(q).scalar()
+        return cls.__um_session__.execute(q).scalar()
 
     # ~ CRUD
 
@@ -265,7 +273,7 @@ class UtilityMixin:
             allow_none: bool = True,
             return_record: bool = False,
     ) -> t.Optional[t.Self]:
-        cls._um_check_db_attr_exists()
+        cls._um_check_session_exists()
 
         new_values = {
             key: cls._um_parse_value(key, value, getattr(cls, key).type)
@@ -276,12 +284,14 @@ class UtilityMixin:
         }
 
         if return_record:
-            result = cls.__um_db__.session.execute(insert(cls).values(**new_values).returning(cls))
-            cls.__um_db__.session.commit()
-            return result.scalar_one_or_none()
+            result = cls.__um_session__.execute(
+                insert(cls).values(**new_values).returning(cls)
+            ).scalar_one_or_none()
+            cls.__um_session__.commit()
+            return result
 
-        cls.__um_db__.session.execute(insert(cls).values(**new_values))
-        cls.__um_db__.session.commit()
+        cls.__um_session__.execute(insert(cls).values(**new_values))
+        cls.__um_session__.commit()
 
     @classmethod
     def um_create_batch(
@@ -289,7 +299,7 @@ class UtilityMixin:
             batch_values: list[dict],
             allow_none: bool = True,
     ) -> tuple[t.Any, t.Any] | tuple[None, None]:
-        cls._um_check_db_attr_exists()
+        cls._um_check_session_exists()
 
         _ = [
             {
@@ -302,8 +312,8 @@ class UtilityMixin:
             for x in batch_values
         ]
 
-        result = cls.__um_db__.session.execute(insert(cls).values(_))
-        cls.__um_db__.session.commit()
+        result = cls.__um_session__.execute(insert(cls).values(_))
+        cls.__um_session__.commit()
 
         return result
 
@@ -311,6 +321,7 @@ class UtilityMixin:
     @classmethod
     def um_read(
             cls,
+            select_: Select = None,
             pkv: int = None,
             fields: dict = None,
             order_by: dict = None,
@@ -339,9 +350,13 @@ class UtilityMixin:
 
         paginate and as_json can be used together.
         """
-        cls._um_check_db_attr_exists()
+        cls._um_check_session_exists()
 
-        q = select(cls)
+        if select_:
+            q = select_
+
+        else:
+            q = select(cls)
 
         if pkv:
             pk = inspect(cls).primary_key[0]
@@ -361,7 +376,7 @@ class UtilityMixin:
                         q = q.order_by(getattr(cls, field).asc())
 
         if paginate and not as_json:
-            return cls.__um_db__.paginate(
+            return cls.__um_session__.paginate(
                 q, page=paginate_page, per_page=paginate_per_page, count=paginate_count
             )
 
@@ -374,7 +389,7 @@ class UtilityMixin:
                 one_or_none=one_or_none,
                 include_joins=json_include_joins,
                 only_columns=json_only_columns,
-                _remove_return_key=json_remove_return_key,
+                remove_return_key=json_remove_return_key,
                 **{
                     "paginate": True,
                     "paginate_page": paginate_page,
@@ -386,12 +401,12 @@ class UtilityMixin:
             )
 
         if one_or_none:
-            return cls.__um_db__.session.execute(q).scalar_one_or_none()
+            return cls.__um_session__.execute(q).scalar_one_or_none()
 
         if first:
-            return cls.__um_db__.session.execute(q).first()
+            return cls.__um_session__.execute(q).first()
 
-        exe = cls.__um_db__.session.execute(q).scalars().all()
+        exe = cls.__um_session__.execute(q).scalars().all()
         return exe[0] if len(exe) == 1 else exe
 
     # Update
@@ -403,16 +418,17 @@ class UtilityMixin:
             skip_attrs: list[str] = None,
             fail_on_unknown_attr: bool = True,
             return_record: bool = False,
+            return_input_values: bool = False,
+            prevent_commit: bool = False,
     ) -> t.Optional[t.Union[dict, Result]]:
         """
-        where: {'model_attribute': 'value', ...}
-        values: {'model_attribute': 'value', ...}
-
-        fail_on_unknown_attr will raise a ValueError if an attribute is not found in the model
-
+        where: {'model_attribute': 'value' | ['values'...], ...} :raw-html:`<br />`
+        if where value is a list, the query will use the IN operator. :raw-html:`<br />`
+        values: {'model_attribute': 'value', ...} :raw-html:`<br />`
+        fail_on_unknown_attr will raise a ValueError if an attribute is not found in the model :raw-html:`<br />`
         if fail_on_unknown_attr is False, the function will ignore any attribute not found in the model
         """
-        cls._um_check_db_attr_exists()
+        cls._um_check_session_exists()
 
         if not values:
             raise ValueError("values parameter is required")
@@ -433,7 +449,7 @@ class UtilityMixin:
             else:
                 q.where(pk == values[pk.name])  # type: ignore
 
-        updated_values = {}
+        _ = {}
 
         for key, value in values.items():
             if key in skip_attrs:
@@ -441,29 +457,31 @@ class UtilityMixin:
             if key == pk.name:
                 continue
             if hasattr(cls, key):
-                updated_values[key] = cls._um_parse_value(
-                    key, value, getattr(cls, key).type
-                )
+                _[key] = cls._um_parse_value(key, value, getattr(cls, key).type)
             else:
                 if fail_on_unknown_attr:
-                    raise ValueError(
+                    raise ModelAttributeError(
                         f"Model attribute {key} not found in {cls.__name__}"
                     )
 
         if return_record:
-            q = q.returning(cls)
-            return cls.__um_db__.session.execute(
-                q.values(**updated_values)
+            r = cls.__um_session__.execute(
+                q.values(**_).returning(cls)
             ).scalar_one_or_none()
 
-        cls.__um_db__.session.execute(q.values(**updated_values))  # type: ignore
-        cls.__um_db__.session.commit()
+            if not prevent_commit:
+                cls.__um_session__.commit()
+            return r
 
-        return updated_values
+        cls.__um_session__.execute(q.values(**_))  # type: ignore
+
+        if not prevent_commit:
+            cls.__um_session__.commit()
+
+        if return_input_values:
+            return _
 
     def um_inline_update(self, values: dict, fail_on_unknown_attr: bool = True):
-        self._um_check_db_attr_exists()
-
         for key, value in values.items():
             if hasattr(self, key):
                 setattr(
@@ -471,7 +489,7 @@ class UtilityMixin:
                 )
             else:
                 if fail_on_unknown_attr:
-                    raise ValueError(
+                    raise ModelAttributeError(
                         f"Model attribute {key} not found in {self.__name__}"
                     )
 
@@ -480,13 +498,17 @@ class UtilityMixin:
     # Delete
     @classmethod
     def um_delete(
-            cls, pkv: int = None, fields: dict = None, fail_on_unknown_attr: bool = True
+            cls,
+            pkv: int = None,
+            fields: dict = None,
+            fail_on_unknown_attr: bool = True,
+            prevent_commit: bool = False,
     ) -> None:
         """
         pkv is the primary key value
         fields: {'model_attribute': 'value', ...}
         """
-        cls._um_check_db_attr_exists()
+        cls._um_check_session_exists()
 
         q = delete(cls)
         if pkv:
@@ -503,14 +525,17 @@ class UtilityMixin:
                             f"Model attribute {model_attr} not found in {cls.__name__}"
                         )
 
-        cls.__um_db__.session.execute(q)
-        cls.__um_db__.session.commit()
+        cls.__um_session__.execute(q)
+
+        if not prevent_commit:
+            cls.__um_session__.commit()
 
     @classmethod
     def um_as_jsonable_dict(
             cls,
             execute: t.Union[Select, Insert, Update, Delete, Result, Pagination],
             return_key_name: str = None,
+            remove_return_key: bool = False,
             include_joins: list[tuple[str, str] | str] = None,
             cast_joins: list[tuple[str, str]] = None,
             all_columns_but: list = None,
@@ -521,7 +546,6 @@ class UtilityMixin:
             paginate_page: int = 1,
             paginate_per_page: int = 10,
             paginate_count: bool = True,
-            _remove_return_key: bool = False,
     ) -> (
             dict
             | dict[str | None, dict]
@@ -529,7 +553,7 @@ class UtilityMixin:
             | list[dict]
             | dict[str | None, list[dict]]
     ):
-        cls._um_check_db_attr_exists()
+        cls._um_check_session_exists()
 
         if (
                 isinstance(execute, Select)
@@ -537,15 +561,15 @@ class UtilityMixin:
                 or isinstance(execute, Update)
                 or isinstance(execute, Delete)
         ):
-            if paginate and not one_or_none:
-                execute: t.Union[Result, Pagination] = cls.__um_db__.paginate(
+            if paginate:
+                execute: t.Union[Result, Pagination] = cls.__um_session__.paginate(
                     execute,
                     page=paginate_page,
                     per_page=paginate_per_page,
                     count=paginate_count,
                 )
             else:
-                execute: t.Union[Result, Pagination] = cls.__um_db__.session.execute(execute)
+                execute = cls.__um_session__.execute(execute)
 
         shrink_args = {
             "include_joins": include_joins,
@@ -562,11 +586,11 @@ class UtilityMixin:
 
             result = execute.scalar_one_or_none()
             if result:
-                if _remove_return_key:
+                if remove_return_key:
                     return cls._parse_rows(result, **shrink_args)
 
                 return {
-                    cls.__um_db__.session.__name__
+                    cls.__um_session__.__name__
                     if return_key_name is None
                     else return_key_name: cls._parse_rows(result, **shrink_args)
                 }
@@ -579,18 +603,18 @@ class UtilityMixin:
 
             result = execute.scalars().first()
             if result:
-                if _remove_return_key:
+                if remove_return_key:
                     return cls._parse_rows(result, **shrink_args)
 
                 return {
-                    cls.__um_db__.session.__name__
+                    cls.__um_session__.__name__
                     if return_key_name is None
                     else return_key_name: cls._parse_rows(result, **shrink_args)
                 }
 
             return {}
 
-        if _remove_return_key:
+        if remove_return_key:
             r = (
                 [cls._parse_rows(x, **shrink_args) for x in execute.items]
                 if paginate
@@ -621,7 +645,9 @@ class UtilityMixin:
             }
             if paginate
             else None,
-            cls.__um_db__.session.__name__ if return_key_name is None else return_key_name: [
+            cls.__um_session__.__name__
+            if return_key_name is None
+            else return_key_name: [
                 cls._parse_rows(x.items, **shrink_args) for x in execute.items
             ]
             if paginate

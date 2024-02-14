@@ -9,18 +9,18 @@ def create_app():
     imp.import_models("models")
     db.init_app(app)
 
-    @app.cli.command("init-db")
+    @app.cli.command("init")
     def init_db():
         db.create_all()
         print("Database created.")
 
-    @app.cli.command("reset-db")
+    @app.cli.command("reset")
     def init_db():
         db.drop_all()
         db.create_all()
         print("Database reset.")
 
-    @app.cli.command("load-db")
+    @app.cli.command("load")
     def load_db():
         from app.models.example import Example
         from faker import Faker
@@ -39,6 +39,18 @@ def create_app():
 
         Example.um_create_batch(fr)
 
-        print("Database loaded.")
+        print(f"Database loaded. There are now {Example.um_count()} records.")
 
     return app
+
+
+    @app.cli.command("delete-random")
+        def delete_random_record():
+            from app.models.example import Example
+            import random
+
+            count = Example.um_count()
+            record = Example.um_read()
+
+            Example.um_delete(random.choice(Example.query.all()).example_id)
+            print(f"Random record deleted. There are now {Example.um_count()} records.")
