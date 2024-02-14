@@ -303,9 +303,16 @@ class UtilityMixin:
     def um_create_batch(
             cls,
             batch_values: list[dict],
+            custom_insert: Insert = None,
             allow_none: bool = True,
+            return_records: bool = False,
     ) -> tuple[t.Any, t.Any] | tuple[None, None]:
         cls._um_check_session_exists()
+
+        if custom_insert:
+            q = custom_insert
+        else:
+            q = insert(cls)
 
         _ = [
             {
@@ -318,9 +325,15 @@ class UtilityMixin:
             for x in batch_values
         ]
 
-        r = cls.__um_session__.execute(insert(cls).values(_))
+        if return_records:
+            r = cls.__um_session__.execute(
+                q.values(_).returning(cls)
+            ).scalars().all()
+            cls.__um_session__.commit()
+            return r
+
+        cls.__um_session__.execute(q.values(_))
         cls.__um_session__.commit()
-        return r
 
     # Read
     @classmethod
