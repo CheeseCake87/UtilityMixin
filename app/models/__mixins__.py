@@ -314,16 +314,15 @@ class UtilityMixin:
 
         result = cls.__um_session__.execute(insert(cls).values(_))
         cls.__um_session__.commit()
-
         return result
 
     # Read
     @classmethod
     def um_read(
             cls,
-            select_: Select = None,
             pkv: int = None,
             fields: dict = None,
+            custom_select: Select = None,
             order_by: dict = None,
             one_or_none: bool = False,
             first: bool = False,
@@ -340,8 +339,9 @@ class UtilityMixin:
         """
         pkv is the primary key value
         fields: {'model_attribute': 'value', ...}
-        order_by: {'model_attribute': 'asc' | 'desc', ...}
+        custom_select: pass your own select query in
 
+        order_by: {'model_attribute': 'asc' | 'desc', ...}
         one_or_none: True | False # if True, return one or None
         first: True | False # if True, return the first result
 
@@ -352,8 +352,8 @@ class UtilityMixin:
         """
         cls._um_check_session_exists()
 
-        if select_:
-            q = select_
+        if custom_select:
+            q = custom_select
 
         else:
             q = select(cls)
@@ -406,8 +406,7 @@ class UtilityMixin:
         if first:
             return cls.__um_session__.execute(q).first()
 
-        exe = cls.__um_session__.execute(q).scalars().all()
-        return exe[0] if len(exe) == 1 else exe
+        return cls.__um_session__.execute(q).scalars().all()
 
     # Update
     @classmethod
