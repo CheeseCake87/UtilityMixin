@@ -284,11 +284,11 @@ class UtilityMixin:
         }
 
         if return_record:
-            result = cls.__um_session__.execute(
+            r = cls.__um_session__.execute(
                 insert(cls).values(**new_values).returning(cls)
             ).scalar_one_or_none()
             cls.__um_session__.commit()
-            return result
+            return r
 
         cls.__um_session__.execute(insert(cls).values(**new_values))
         cls.__um_session__.commit()
@@ -312,9 +312,9 @@ class UtilityMixin:
             for x in batch_values
         ]
 
-        result = cls.__um_session__.execute(insert(cls).values(_))
+        r = cls.__um_session__.execute(insert(cls).values(_))
         cls.__um_session__.commit()
-        return result
+        return r
 
     # Read
     @classmethod
@@ -413,6 +413,7 @@ class UtilityMixin:
     def um_update(
             cls,
             where: dict[str, t.Union[str, list]] = None,
+            custom_update: Update = None,
             values: dict = None,
             skip_attrs: list[str] = None,
             fail_on_unknown_attr: bool = True,
@@ -433,7 +434,11 @@ class UtilityMixin:
             raise ValueError("values parameter is required")
 
         pk = inspect(cls).primary_key[0]
-        q = update(cls)
+
+        if custom_update:
+            q = custom_update
+        else:
+            q = update(cls)
 
         if where:
             for model_attr, value in where.items():
@@ -583,15 +588,15 @@ class UtilityMixin:
                     "execute does not have a scalar_one_or_none() attribute"
                 )
 
-            result = execute.scalar_one_or_none()
-            if result:
+            r = execute.scalar_one_or_none()
+            if r:
                 if remove_return_key:
-                    return cls._parse_rows(result, **shrink_args)
+                    return cls._parse_rows(r, **shrink_args)
 
                 return {
                     cls.__um_session__.__name__
                     if return_key_name is None
-                    else return_key_name: cls._parse_rows(result, **shrink_args)
+                    else return_key_name: cls._parse_rows(r, **shrink_args)
                 }
 
             return {}
@@ -600,15 +605,15 @@ class UtilityMixin:
             if not hasattr(execute, "first"):
                 raise ValueError("execute does not have a first() attribute")
 
-            result = execute.scalars().first()
-            if result:
+            r = execute.scalars().first()
+            if r:
                 if remove_return_key:
-                    return cls._parse_rows(result, **shrink_args)
+                    return cls._parse_rows(r, **shrink_args)
 
                 return {
                     cls.__um_session__.__name__
                     if return_key_name is None
-                    else return_key_name: cls._parse_rows(result, **shrink_args)
+                    else return_key_name: cls._parse_rows(r, **shrink_args)
                 }
 
             return {}
