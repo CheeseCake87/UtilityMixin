@@ -41,16 +41,15 @@ def create_app():
 
         print(f"Database loaded. There are now {Example.um_count()} records.")
 
-    return app
-
-
     @app.cli.command("delete-random")
-        def delete_random_record():
-            from app.models.example import Example
-            import random
+    def delete_random_record():
+        from app.models.example import Example
+        import random
 
-            count = Example.um_count()
-            record = Example.um_read()
+        count = Example.um_count()
+        record = Example.um_read()
 
-            Example.um_delete(random.choice(Example.query.all()).example_id)
-            print(f"Random record deleted. There are now {Example.um_count()} records.")
+        Example.um_delete(random.choice(Example.query.all()).example_id)
+        print(f"Random record deleted. There are now {Example.um_count()} records.")
+
+    return app
