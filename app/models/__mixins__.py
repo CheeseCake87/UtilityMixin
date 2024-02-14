@@ -270,10 +270,16 @@ class UtilityMixin:
     def um_create(
             cls,
             values: dict,
+            custom_insert: Insert = None,
             allow_none: bool = True,
             return_record: bool = False,
     ) -> t.Optional[t.Self]:
         cls._um_check_session_exists()
+
+        if custom_insert:
+            q = custom_insert
+        else:
+            q = insert(cls)
 
         new_values = {
             key: cls._um_parse_value(key, value, getattr(cls, key).type)
@@ -285,7 +291,7 @@ class UtilityMixin:
 
         if return_record:
             r = cls.__um_session__.execute(
-                insert(cls).values(**new_values).returning(cls)
+                q.values(**new_values).returning(cls)
             ).scalar_one_or_none()
             cls.__um_session__.commit()
             return r
@@ -453,7 +459,7 @@ class UtilityMixin:
             else:
                 q.where(pk == values[pk.name])  # type: ignore
 
-        _ = {}
+        iv = {}
 
         for key, value in values.items():
             if key in skip_attrs:
@@ -461,7 +467,7 @@ class UtilityMixin:
             if key == pk.name:
                 continue
             if hasattr(cls, key):
-                _[key] = cls._um_parse_value(key, value, getattr(cls, key).type)
+                iv[key] = cls._um_parse_value(key, value, getattr(cls, key).type)
             else:
                 if fail_on_unknown_attr:
                     raise ModelAttributeError(
@@ -470,20 +476,20 @@ class UtilityMixin:
 
         if return_record:
             r = cls.__um_session__.execute(
-                q.values(**_).returning(cls)
+                q.values(**iv).returning(cls)
             ).scalar_one_or_none()
 
             if not prevent_commit:
                 cls.__um_session__.commit()
             return r
 
-        cls.__um_session__.execute(q.values(**_))  # type: ignore
+        cls.__um_session__.execute(q.values(**iv))  # type: ignore
 
         if not prevent_commit:
             cls.__um_session__.commit()
 
         if return_input_values:
-            return _
+            return iv
 
     def um_inline_update(self, values: dict, fail_on_unknown_attr: bool = True):
         for key, value in values.items():
