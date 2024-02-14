@@ -505,6 +505,7 @@ class UtilityMixin:
             cls,
             pkv: int = None,
             fields: dict = None,
+            custom_delete: Delete = None,
             fail_on_unknown_attr: bool = True,
             prevent_commit: bool = False,
     ) -> None:
@@ -514,7 +515,11 @@ class UtilityMixin:
         """
         cls._um_check_session_exists()
 
-        q = delete(cls)
+        if custom_delete:
+            q = custom_delete
+        else:
+            q = delete(cls)
+
         if pkv:
             pk = inspect(cls).primary_key[0]
             q.where(pk == pkv)
