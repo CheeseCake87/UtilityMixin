@@ -1,6 +1,10 @@
+import random
+
+from faker import Faker
 from flask import Flask
 
 from app.extensions import imp, db
+from app.models.example import Example
 
 
 def create_app():
@@ -10,26 +14,44 @@ def create_app():
     db.init_app(app)
 
     @app.cli.command("init")
-    def init_db():
+    def init():
         db.create_all()
         print("Database created.")
 
     @app.cli.command("reset")
-    def init_db():
+    def reset():
         db.drop_all()
         db.create_all()
         print("Database reset.")
 
-    @app.cli.command("load")
-    def load_db():
-        from app.models.example import Example
-        from faker import Faker
+    @app.cli.command("all")
+    def show_all_records():
+        results = Example.um_read()
 
+        print(f"Database has {Example.um_count()} records.")
+        print("Results:")
+        print(results)
+
+    @app.cli.command("load")
+    def load_single():
+        fake = Faker()
+
+        result = Example.um_create({
+            "name": fake.name(),
+            "description": fake.text(),
+        }, return_record=True)
+
+        print(f"Database loaded. There are now {Example.um_count()} records.")
+        print("Result:")
+        print(result)
+
+    @app.cli.command("load-multiple")
+    def load_multiple():
         fake = Faker()
 
         fr = []
 
-        for _ in range(500):
+        for _ in range(5):
             fr.append(
                 {
                     "name": fake.name(),
@@ -37,19 +59,61 @@ def create_app():
                 }
             )
 
-        Example.um_create_batch(fr)
+        results = Example.um_create_batch(fr, return_records=True)
 
         print(f"Database loaded. There are now {Example.um_count()} records.")
+        print("Results:")
+        print(results)
 
-    @app.cli.command("delete-random")
+    @app.cli.command("delete")
     def delete_random_record():
-        from app.models.example import Example
-        import random
+        all_records = Example.um_read()
 
-        count = Example.um_count()
-        record = Example.um_read()
+        random_record = random.choice(all_records)
 
-        Example.um_delete(random.choice(Example.query.all()).example_id)
+        print(f"Deleting random record: {random_record}")
+        Example.um_delete(random_record.example_id)
+
         print(f"Random record deleted. There are now {Example.um_count()} records.")
+        print("Deleted record:")
+        print(random_record)
+
+    @app.cli.command("update-inline")
+    def update_random_record_inline():
+        all_records = Example.um_read()
+
+        random_record = random.choice(all_records)
+
+        print(f"Updating random record: {random_record}")
+        print(f"Original record name: {random_record.name}")
+        print("---")
+        print(f"Class method update attr name to 'Updated Name'")
+        random_record.um_update_inline({"name": "Updated Name"})
+        print("-")
+        cls_query_update = Example.um_read(random_record.example_id, one_or_none=True)
+        print(f"Updated record name (new query): {cls_query_update.name}")
+        print("---")
+
+        print(f"Random record updated.")
+
+    @app.cli.command("update-cls")
+    def update_random_record_cls():
+        all_records = Example.um_read()
+
+        random_record = random.choice(all_records)
+
+        print(f"Updating random record: {random_record}")
+        print(f"Original record name: {random_record.name}")
+        print("---")
+        print(f"Class method update attr name to 'Updated Name'")
+        Example.um_update(
+            {"example_id": random_record.example_id, "name": "Updated Name"}
+        )
+        print("-")
+        cls_query_update = Example.um_read(random_record.example_id, one_or_none=True)
+        print(f"Updated record name (new query): {cls_query_update.name}")
+        print("---")
+
+        print(f"Random record updated.")
 
     return app
