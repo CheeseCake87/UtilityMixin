@@ -1,5 +1,7 @@
 import random
+from pprint import pprint
 
+import click
 from faker import Faker
 from flask import Flask
 
@@ -32,38 +34,70 @@ def create_app():
         print("Results:")
         print(results)
 
-    @app.cli.command("load")
-    def load_single():
-        fake = Faker()
+    @app.cli.command("page")
+    @click.argument("page", type=int, default=1)
+    def show_paged_records(page):
+        results = Example.um_read(
+            paginate=True,
+            paginate_page=page,
+            paginate_per_page=5,
+            paginate_error_out=False,
+        )
 
-        result = Example.um_create({
-            "name": fake.name(),
-            "description": fake.text(),
-        }, return_record=True)
+        if page > results.pages:
+            print(f"Page {page} does not exist.")
+            return
 
-        print(f"Database loaded. There are now {Example.um_count()} records.")
-        print("Result:")
-        print(result)
-
-    @app.cli.command("load-multiple")
-    def load_multiple():
-        fake = Faker()
-
-        fr = []
-
-        for _ in range(5):
-            fr.append(
-                {
-                    "name": fake.name(),
-                    "description": fake.text(),
-                }
-            )
-
-        results = Example.um_create_batch(fr, return_records=True)
-
-        print(f"Database loaded. There are now {Example.um_count()} records.")
+        print(f"Database has {Example.um_count()} records.")
+        print(f"Page {page} of {results.pages}")
+        print(f"Has previous: {results.has_prev}")
+        print(f"Has next: {results.has_next}")
         print("Results:")
-        print(results)
+        print(results.items)
+
+    @app.cli.command("load")
+    @click.argument("amount", type=int, default=1)
+    def load(amount):
+        if amount < 1:
+            print("Amount must be greater than 0.")
+            return
+
+        if amount > 1:
+            fake = Faker()
+
+            fr = []
+
+            for _ in range(amount):
+                fr.append(
+                    {
+                        "name": fake.name(),
+                        "description": fake.text(),
+                    }
+                )
+
+            if amount < 11:
+                results = Example.um_create_batch(fr, return_records=True)
+
+                print(f"Database loaded. There are now {Example.um_count()} records.")
+                print("Results:")
+                print(results)
+                return
+
+            Example.um_create_batch(fr)
+            print(f"Database loaded. There are now {Example.um_count()} records.")
+            print("Printing skipped due to amount being greater than 10.")
+
+        else:
+            fake = Faker()
+
+            result = Example.um_create({
+                "name": fake.name(),
+                "description": fake.text(),
+            }, return_record=True)
+
+            print(f"Database loaded. There are now {Example.um_count()} records.")
+            print("Result:")
+            print(result)
 
     @app.cli.command("delete")
     def delete_random_record():
@@ -115,5 +149,19 @@ def create_app():
         print("---")
 
         print(f"Random record updated.")
+
+    @app.cli.command("page-json")
+    @click.argument("page", type=int, default=1)
+    def show_paged_records_in_json(page):
+        results = Example.um_read(
+            paginate=True,
+            paginate_page=page,
+            paginate_per_page=2,
+            paginate_error_out=False,
+            as_json=True,
+            json_remove_return_key=True,
+        )
+
+        pprint(results)
 
     return app
