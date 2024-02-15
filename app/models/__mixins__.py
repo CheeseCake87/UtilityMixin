@@ -269,7 +269,7 @@ class UtilityMixin:
             allow_none: bool = True,
             return_record: bool = False,
             custom_insert: Insert = None,
-    ) -> t.Optional[t.Self]:
+    ) -> t.Optional[Result]:
         """
         values: {'model_attribute': 'value', ...}
         allow_none: True | False
@@ -308,7 +308,7 @@ class UtilityMixin:
             allow_none: bool = True,
             return_records: bool = False,
             custom_insert: Insert = None,
-    ) -> tuple[t.Any, t.Any] | tuple[None, None]:
+    ) -> t.Optional[list[Result | None]]:
         cls._um_check_session_exists()
 
         if custom_insert:
@@ -356,7 +356,7 @@ class UtilityMixin:
             json_only_columns: list = None,
             json_remove_return_key: bool = False,
             custom_select: Select = None,
-    ) -> t.Union[dict, list, t.Any] | t.Any:
+    ) -> t.Optional[t.Union[dict, list[t.Optional[Result]], Pagination]]:
         """
         pkv is the primary key value
         fields: {'model_attribute': 'value', ...}
@@ -518,7 +518,7 @@ class UtilityMixin:
             values: dict,
             fail_on_unknown_attr: bool = True,
             prevent_commit: bool = False,
-    ):
+    ) -> t.Self:
         for key, value in values.items():
             if hasattr(self, key):
                 setattr(
