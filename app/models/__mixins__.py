@@ -136,13 +136,13 @@ class UtilityMixin:
 
     @staticmethod
     def _parse_rows(
-            cls,
-            rows: t.Union[Row, list, dict],
-            include_joins: list[tuple[str, str] | str] = None,
-            cast_joins: list[tuple[str, str]] = None,
-            all_columns_but: list = None,
-            only_columns: list = None,
-            _is_join: bool = False,
+        cls,
+        rows: t.Union[Row, list, dict],
+        include_joins: list[tuple[str, str] | str] = None,
+        cast_joins: list[tuple[str, str]] = None,
+        all_columns_but: list = None,
+        only_columns: list = None,
+        _is_join: bool = False,
     ) -> t.Union[dict, list]:
         """
         Parses the rows into a dictionary or list of dictionaries
@@ -201,17 +201,17 @@ class UtilityMixin:
                     name, join_attr = join
                     if hasattr(rows, join_attr):
                         joins[name] = [
-                                          cls._parse_rows(row, _is_join=True)
-                                          for row in getattr(rows, join_attr)
-                                      ] or []
+                            cls._parse_rows(row, _is_join=True)
+                            for row in getattr(rows, join_attr)
+                        ] or []
 
                 if isinstance(join, str):
                     if hasattr(rows, join):
                         if isinstance(getattr(rows, join), list):
                             joins[join] = [
-                                              cls._parse_rows(row, _is_join=True)
-                                              for row in getattr(rows, join)
-                                          ] or []
+                                cls._parse_rows(row, _is_join=True)
+                                for row in getattr(rows, join)
+                            ] or []
 
                             continue
 
@@ -239,9 +239,9 @@ class UtilityMixin:
 
     @classmethod
     def um_count(
-            cls,
-            pkv: int = None,
-            fields: dict = None,
+        cls,
+        pkv: int = None,
+        fields: dict = None,
     ) -> int:
         """
         pkv is the primary key value
@@ -268,12 +268,18 @@ class UtilityMixin:
     # Create
     @classmethod
     def um_create(
-            cls,
-            values: dict,
-            custom_insert: Insert = None,
-            allow_none: bool = True,
-            return_record: bool = False,
+        cls,
+        values: dict,
+        allow_none: bool = True,
+        return_record: bool = False,
+        custom_insert: Insert = None,
     ) -> t.Optional[t.Self]:
+        """
+        values: {'model_attribute': 'value', ...}
+        allow_none: True | False
+        return_record: True | False
+        custom_insert: pass your own insert query in
+        """
         cls._um_check_session_exists()
 
         if custom_insert:
@@ -301,11 +307,11 @@ class UtilityMixin:
 
     @classmethod
     def um_create_batch(
-            cls,
-            batch_values: list[dict],
-            custom_insert: Insert = None,
-            allow_none: bool = True,
-            return_records: bool = False,
+        cls,
+        batch_values: list[dict],
+        allow_none: bool = True,
+        return_records: bool = False,
+        custom_insert: Insert = None,
     ) -> tuple[t.Any, t.Any] | tuple[None, None]:
         cls._um_check_session_exists()
 
@@ -326,9 +332,7 @@ class UtilityMixin:
         ]
 
         if return_records:
-            r = cls.__um_session__.execute(
-                q.values(_).returning(cls)
-            ).scalars().all()
+            r = cls.__um_session__.execute(q.values(_).returning(cls)).scalars().all()
             cls.__um_session__.commit()
             return r
 
@@ -338,27 +342,28 @@ class UtilityMixin:
     # Read
     @classmethod
     def um_read(
-            cls,
-            pkv: int = None,
-            fields: dict = None,
-            custom_select: Select = None,
-            order_by: dict = None,
-            one_or_none: bool = False,
-            first: bool = False,
-            paginate: bool = False,
-            paginate_page: int = 1,
-            paginate_per_page: int = 10,
-            paginate_count: bool = True,
-            as_json: bool = False,
-            json_include_joins: list[tuple[str, str] | str] = None,
-            json_return_key_name: str = None,
-            json_only_columns: list = None,
-            json_remove_return_key: bool = False,
+        cls,
+        pkv: int = None,
+        fields: dict = None,
+        order_by: dict = None,
+        one_or_none: bool = False,
+        first: bool = False,
+        paginate: bool = False,
+        paginate_page: int = 1,
+        paginate_per_page: int = 10,
+        paginate_max_per_page: int = 100,
+        paginate_error_out: bool = True,
+        paginate_count: bool = True,
+        as_json: bool = False,
+        json_include_joins: list[tuple[str, str] | str] = None,
+        json_return_key_name: str = None,
+        json_only_columns: list = None,
+        json_remove_return_key: bool = False,
+        custom_select: Select = None,
     ) -> t.Union[dict, list, t.Any] | t.Any:
         """
         pkv is the primary key value
         fields: {'model_attribute': 'value', ...}
-        custom_select: pass your own select query in
 
         order_by: {'model_attribute': 'asc' | 'desc', ...}
         one_or_none: True | False # if True, return one or None
@@ -368,6 +373,8 @@ class UtilityMixin:
         as_json: True | False # if True, return the results as a jsonable dict
 
         paginate and as_json can be used together.
+
+        custom_select: pass your own select query in
         """
         cls._um_check_session_exists()
 
@@ -396,7 +403,12 @@ class UtilityMixin:
 
         if paginate and not as_json:
             return cls.__um_session__.paginate(
-                q, page=paginate_page, per_page=paginate_per_page, count=paginate_count
+                q,
+                page=paginate_page,
+                per_page=paginate_per_page,
+                max_per_page=paginate_max_per_page,
+                error_out=paginate_error_out,
+                count=paginate_count
             )
 
         if as_json:
@@ -430,15 +442,15 @@ class UtilityMixin:
     # Update
     @classmethod
     def um_update(
-            cls,
-            where: dict[str, t.Union[str, list]] = None,
-            custom_update: Update = None,
-            values: dict = None,
-            skip_attrs: list[str] = None,
-            fail_on_unknown_attr: bool = True,
-            return_record: bool = False,
-            return_input_values: bool = False,
-            prevent_commit: bool = False,
+        cls,
+        values: dict = None,
+        where: dict[str, t.Union[str, list]] = None,
+        skip_attrs: list[str] = None,
+        fail_on_unknown_attr: bool = True,
+        return_record: bool = False,
+        return_input_values: bool = False,
+        prevent_commit: bool = False,
+        custom_update: Update = None,
     ) -> t.Optional[t.Union[dict, Result]]:
         """
         where: {'model_attribute': 'value' | ['values'...], ...} :raw-html:`<br />`
@@ -470,13 +482,14 @@ class UtilityMixin:
             if pk.name not in values:
                 raise ValueError(f"Primary key value not found in values")
             else:
-                q.where(pk == values[pk.name])  # type: ignore
+                q = q.where(pk == values[pk.name])  # type: ignore
 
         iv = {}
 
         for key, value in values.items():
-            if key in skip_attrs:
-                continue
+            if skip_attrs:
+                if key in skip_attrs:
+                    continue
             if key == pk.name:
                 continue
             if hasattr(cls, key):
@@ -504,11 +517,18 @@ class UtilityMixin:
         if return_input_values:
             return iv
 
-    def um_inline_update(self, values: dict, fail_on_unknown_attr: bool = True):
+    def um_update_inline(
+        self,
+        values: dict,
+        fail_on_unknown_attr: bool = True,
+        prevent_commit: bool = False,
+    ):
         for key, value in values.items():
             if hasattr(self, key):
                 setattr(
-                    self, key, self._um_parse_value(key, value, getattr(self, key).type)
+                    self,
+                    key,
+                    self._um_parse_value(key, value, getattr(self.__class__, key).type),
                 )
             else:
                 if fail_on_unknown_attr:
@@ -516,17 +536,20 @@ class UtilityMixin:
                         f"Model attribute {key} not found in {self.__name__}"
                     )
 
+        if not prevent_commit:
+            self.__um_session__.commit()
+
         return self
 
     # Delete
     @classmethod
     def um_delete(
-            cls,
-            pkv: int = None,
-            fields: dict = None,
-            custom_delete: Delete = None,
-            fail_on_unknown_attr: bool = True,
-            prevent_commit: bool = False,
+        cls,
+        pkv: int = None,
+        fields: dict = None,
+        fail_on_unknown_attr: bool = True,
+        prevent_commit: bool = False,
+        custom_delete: Delete = None,
     ) -> None:
         """
         pkv is the primary key value
@@ -541,7 +564,7 @@ class UtilityMixin:
 
         if pkv:
             pk = inspect(cls).primary_key[0]
-            q.where(pk == pkv)
+            q = q.where(pk == pkv)
 
         if fields:
             for model_attr, value in fields.items():
@@ -560,34 +583,34 @@ class UtilityMixin:
 
     @classmethod
     def um_as_jsonable_dict(
-            cls,
-            execute: t.Union[Select, Insert, Update, Delete, Result, Pagination],
-            return_key_name: str = None,
-            remove_return_key: bool = False,
-            include_joins: list[tuple[str, str] | str] = None,
-            cast_joins: list[tuple[str, str]] = None,
-            all_columns_but: list = None,
-            only_columns: list = None,
-            one_or_none: bool = False,
-            first: bool = False,
-            paginate: bool = False,
-            paginate_page: int = 1,
-            paginate_per_page: int = 10,
-            paginate_count: bool = True,
+        cls,
+        execute: t.Union[Select, Insert, Update, Delete, Result, Pagination],
+        return_key_name: str = None,
+        remove_return_key: bool = False,
+        include_joins: list[tuple[str, str] | str] = None,
+        cast_joins: list[tuple[str, str]] = None,
+        all_columns_but: list = None,
+        only_columns: list = None,
+        one_or_none: bool = False,
+        first: bool = False,
+        paginate: bool = False,
+        paginate_page: int = 1,
+        paginate_per_page: int = 10,
+        paginate_count: bool = True,
     ) -> (
-            dict
-            | dict[str | None, dict]
-            | dict[t.Any, t.Any]
-            | list[dict]
-            | dict[str | None, list[dict]]
+        dict
+        | dict[str | None, dict]
+        | dict[t.Any, t.Any]
+        | list[dict]
+        | dict[str | None, list[dict]]
     ):
         cls._um_check_session_exists()
 
         if (
-                isinstance(execute, Select)
-                or isinstance(execute, Insert)
-                or isinstance(execute, Update)
-                or isinstance(execute, Delete)
+            isinstance(execute, Select)
+            or isinstance(execute, Insert)
+            or isinstance(execute, Update)
+            or isinstance(execute, Delete)
         ):
             if paginate:
                 execute: t.Union[Result, Pagination] = cls.__um_session__.paginate(
