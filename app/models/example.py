@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from app.extensions import db
-from .__mixins__ import UtilityMixin
+from .__utility_mixin__ import UtilityMixin
 
 
 class Example(db.Model, UtilityMixin):
