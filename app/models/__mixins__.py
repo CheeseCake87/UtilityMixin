@@ -51,7 +51,7 @@ class UtilityMixin:
     __fsa__: SQLAlchemy
 
     @classmethod
-    def _um_check_session_exists(cls):
+    def _um_check_fsa_exists(cls):
         if not hasattr(cls, "__fsa__"):
             raise AttributeError(
                 dedent(
@@ -228,7 +228,7 @@ class UtilityMixin:
         return {**data, **joins}
 
     def um_commit(self):
-        self._um_check_session_exists()
+        self._um_check_fsa_exists()
 
         self.__fsa__.session.commit()
         return self
@@ -243,7 +243,7 @@ class UtilityMixin:
         pkv is the primary key value
         fields: {'model_attribute': 'value', ...}
         """
-        cls._um_check_session_exists()
+        cls._um_check_fsa_exists()
 
         q = select(func.count()).select_from(cls)
 
@@ -276,7 +276,7 @@ class UtilityMixin:
         return_record: True | False
         custom_insert: pass your own insert query in
         """
-        cls._um_check_session_exists()
+        cls._um_check_fsa_exists()
 
         if custom_insert:
             q = custom_insert
@@ -309,7 +309,7 @@ class UtilityMixin:
         return_records: bool = False,
         custom_insert: Insert = None,
     ) -> t.Optional[list[Result | None]]:
-        cls._um_check_session_exists()
+        cls._um_check_fsa_exists()
 
         if custom_insert:
             q = custom_insert
@@ -372,7 +372,7 @@ class UtilityMixin:
 
         custom_select: pass your own select query in
         """
-        cls._um_check_session_exists()
+        cls._um_check_fsa_exists()
 
         if custom_select:
             q = custom_select
@@ -455,7 +455,7 @@ class UtilityMixin:
         fail_on_unknown_attr will raise a ValueError if an attribute is not found in the model :raw-html:`<br />`
         if fail_on_unknown_attr is False, the function will ignore any attribute not found in the model
         """
-        cls._um_check_session_exists()
+        cls._um_check_fsa_exists()
 
         if not values:
             raise ValueError("values parameter is required")
@@ -551,7 +551,7 @@ class UtilityMixin:
         pkv is the primary key value
         fields: {'model_attribute': 'value', ...}
         """
-        cls._um_check_session_exists()
+        cls._um_check_fsa_exists()
 
         if custom_delete:
             q = custom_delete
@@ -600,7 +600,7 @@ class UtilityMixin:
         | list[dict]
         | dict[str | None, list[dict]]
     ):
-        cls._um_check_session_exists()
+        cls._um_check_fsa_exists()
 
         if (
             isinstance(execute, Select)
