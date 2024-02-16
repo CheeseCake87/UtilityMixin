@@ -1,2 +1,5 @@
+click
+flask
 flask-imp
+flask-sqlalchemy
 faker
