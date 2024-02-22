@@ -1,4 +1,5 @@
 import typing as t
+from dataclasses import dataclass
 from datetime import date as d
 from datetime import datetime as dt
 from textwrap import dedent
@@ -30,6 +31,25 @@ try:
     from flask_sqlalchemy.pagination import Pagination
 except ImportError:
     raise ImportError("Flask-SQLAlchemy is not installed")
+
+
+# tools
+
+
+@dataclass
+class RelationshipCast:
+    """
+    relationship - relationship attribute name to use
+    return_attribute - name to give the attribute storing the value on output
+    limit - can only be used with lazy="dynamic" set on your relationship
+    """
+
+    relationship: str = None
+    return_attribute: str = None
+    limit: int = None
+
+
+# exceptions
 
 
 class ParseValueError(Exception):
@@ -92,7 +112,7 @@ class UtilityMixin:
         allow_none: bool = True,
         return_record: bool = False,
         custom_insert: Insert = None,
-    ) -> t.Optional[Result]:
+    ) -> t.Optional[t.Union[Result, t.Self]]:
         """
         values: {'model_attribute': 'value', ...}
         allow_none: True | False
@@ -151,7 +171,11 @@ class UtilityMixin:
         ]
 
         if return_records:
-            r = cls.__fsa__.session.execute(q.values(_).returning(cls)).scalars().all()
+            r = (
+                cls.__fsa__.session.execute(q.values(_).returning(cls))
+                .scalars()
+                .all()
+            )
             cls.__fsa__.session.commit()
             return r
 
@@ -174,12 +198,16 @@ class UtilityMixin:
         paginate_error_out: bool = True,
         paginate_count: bool = True,
         as_json: bool = False,
-        json_include_joins: list[tuple[str, str] | str] = None,
+        json_relationships: list[
+            t.Union[RelationshipCast]
+        ] = None,
         json_return_key_name: str = None,
         json_only_columns: list = None,
         json_remove_return_key: bool = False,
         custom_select: Select = None,
-    ) -> t.Optional[t.Union[dict, list[t.Optional[Result]], Pagination]]:
+    ) -> t.Optional[
+        t.Union[dict, list[t.Optional[Result]], Pagination, t.Self]
+    ]:
         """
         pkv is the primary key value
         fields: {'model_attribute': 'value', ...}
@@ -237,7 +265,7 @@ class UtilityMixin:
                 if json_return_key_name
                 else cls.__name__,
                 one_or_none=one_or_none,
-                include_joins=json_include_joins,
+                relationships=json_relationships,
                 only_columns=json_only_columns,
                 remove_return_key=json_remove_return_key,
                 **{
@@ -298,10 +326,10 @@ class UtilityMixin:
                     else:
                         q = q.where(getattr(cls, model_attr) == value)
         else:
-            if pk.name not in values:
+            if pk.return_attribute not in values:
                 raise ValueError(f"Primary key value not found in values")
             else:
-                q = q.where(pk == values[pk.name])  # type: ignore
+                q = q.where(pk == values[pk.return_attribute])  # type: ignore
 
         iv = {}
 
@@ -309,10 +337,12 @@ class UtilityMixin:
             if skip_attrs:
                 if key in skip_attrs:
                     continue
-            if key == pk.name:
+            if key == pk.return_attribute:
                 continue
             if hasattr(cls, key):
-                iv[key] = cls._um_parse_value(key, value, getattr(cls, key).type)
+                iv[key] = cls._um_parse_value(
+                    key, value, getattr(cls, key).type
+                )
             else:
                 if fail_on_unknown_attr:
                     raise ModelAttributeError(
@@ -347,7 +377,9 @@ class UtilityMixin:
                 setattr(
                     self,
                     key,
-                    self._um_parse_value(key, value, getattr(self.__class__, key).type),
+                    self._um_parse_value(
+                        key, value, getattr(self.__class__, key).type
+                    ),
                 )
             else:
                 if fail_on_unknown_attr:
@@ -407,8 +439,9 @@ class UtilityMixin:
         execute: t.Union[Select, Insert, Update, Delete, Result, Pagination],
         return_key_name: str = None,
         remove_return_key: bool = False,
-        include_joins: list[tuple[str, str] | str] = None,
-        cast_joins: list[tuple[str, str]] = None,
+        relationships: list[
+            t.Union[RelationshipCast]
+        ] = None,
         all_columns_but: list = None,
         only_columns: list = None,
         one_or_none: bool = False,
@@ -443,8 +476,7 @@ class UtilityMixin:
                 execute = cls.__fsa__.session.execute(execute)
 
         shrink_args = {
-            "include_joins": include_joins,
-            "cast_joins": cast_joins,
+            "relationships": relationships,
             "all_columns_but": all_columns_but,
             "only_columns": only_columns,
         }
@@ -490,7 +522,8 @@ class UtilityMixin:
                 [cls._parse_rows(x, **shrink_args) for x in execute.items]
                 if paginate
                 else [
-                    cls._parse_rows(x, **shrink_args) for x in execute.scalars().all()
+                    cls._parse_rows(x, **shrink_args)
+                    for x in execute.scalars().all()
                 ]
             )
 
@@ -524,7 +557,10 @@ class UtilityMixin:
                 cls._parse_rows(x, **shrink_args) for x in execute.items
             ]
             if paginate
-            else [cls._parse_rows(x, **shrink_args) for x in execute.scalars().all()],
+            else [
+                cls._parse_rows(x, **shrink_args)
+                for x in execute.scalars().all()
+            ],
         }
 
     @staticmethod
@@ -596,8 +632,9 @@ class UtilityMixin:
     def _parse_rows(
         cls,
         rows: t.Union[Row, list, dict],
-        include_joins: list[tuple[str, str] | str] = None,
-        cast_joins: list[tuple[str, str]] = None,
+        relationships: list[
+            t.Union[RelationshipCast]
+        ] = None,
         all_columns_but: list = None,
         only_columns: list = None,
         _is_join: bool = False,
@@ -605,8 +642,7 @@ class UtilityMixin:
         """
         Parses the rows into a dictionary or list of dictionaries
 
-        include_joins: [('given_name', 'join_attr') | 'join_attr']
-        cast_joins: [('given_name', 'join_attr.attr_of_join')]
+        relationships: [RelationshipCast(...), ...] # include these relationships in the return
 
         all_columns_but: ['column_name', ...] # exclude these columns in the return
         only_columns: ['column_name', ...] # only include these columns in the return
@@ -618,8 +654,8 @@ class UtilityMixin:
         if isinstance(rows, list):
             return [cls._parse_rows(row, _is_join=True) for row in rows]
 
-        if include_joins is None:
-            include_joins = []
+        if relationships is None:
+            relationships = []
 
         if all_columns_but is None:
             all_columns_but = []
@@ -653,39 +689,24 @@ class UtilityMixin:
             return data
 
         joins = dict()
-        if include_joins:
-            for join in include_joins:
-                if isinstance(join, tuple):
-                    name, join_attr = join
-                    if hasattr(rows, join_attr):
-                        joins[name] = [
-                            cls._parse_rows(row, _is_join=True)
-                            for row in getattr(rows, join_attr)
-                        ] or []
-
-                if isinstance(join, str):
-                    if hasattr(rows, join):
-                        if isinstance(getattr(rows, join), list):
-                            joins[join] = [
+        for rel in relationships:
+            if isinstance(rel, RelationshipCast):
+                if rel.relationship:
+                    if hasattr(rows, rel.relationship):
+                        if rel.limit:
+                            joins[rel.return_attribute or rel.relationship] = [
                                 cls._parse_rows(row, _is_join=True)
-                                for row in getattr(rows, join)
+                                for row in getattr(
+                                    rows, rel.relationship
+                                ).limit(rel.limit)
+                            ] or []
+                        else:
+                            joins[rel.return_attribute or rel.relationship] = [
+                                cls._parse_rows(row, _is_join=True)
+                                for row in getattr(rows, rel.relationship)
                             ] or []
 
-                            continue
-
-                        joins[join] = cls._parse_rows(rows, _is_join=True)
-
-        if cast_joins:
-            for given_name, join_cast in cast_joins:
-                split_join_cast = join_cast.split(".")
-                if hasattr(rows, split_join_cast[0]):
-                    join_attr = getattr(rows, split_join_cast[0])
-                    if hasattr(join_attr, split_join_cast[1]):
-                        data[given_name] = getattr(join_attr, split_join_cast[1])
-                    else:
-                        data[given_name] = None
-                else:
-                    data[given_name] = None
+                pass
 
         return {**data, **joins}
 
